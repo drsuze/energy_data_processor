@@ -22,6 +22,3 @@ def main():
     print('Completed.')
 
 
-# execute
-if __name__ == "__main__":
-    main()

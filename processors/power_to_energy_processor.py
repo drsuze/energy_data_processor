@@ -1,4 +1,4 @@
-# initial logic to convert time series power data to daily energy stats
+# initial logic to convert time series data to daily energy stats
 
 
 import pandas as pd
