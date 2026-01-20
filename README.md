@@ -4,6 +4,13 @@ This repository includes the package named 'energizer' which generates daily ene
 ### How to install and use the latest version of the energizer package available in TestPyPi
 1. Make sure you have Python3.12 installed
 2. In your terminal, create a new environment using Python3.12
+```bash
+python3.12 -m venv energize_venv
+source energize_venv/bin/activate  # macOS
+# OR
+energize_venv\Scripts\Activate.ps1 # Windows
+```
+
 3. Install the latest available 'energizer' package with the following command:
 ```bash
 pip install \
