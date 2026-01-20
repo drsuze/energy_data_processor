@@ -34,6 +34,9 @@ def calc_per_bess_power_data(zip_file) -> pd.DataFrame:
         for filename in os.listdir(tmpdir):
             full_path = os.path.join(tmpdir, filename)
             file_df = pd.read_parquet(full_path)
+            file_df = file_df.drop(
+                columns=[c for c in file_df.columns if c.startswith("Unnamed")]
+            )
             power_df = parse_raw_measurements(file_df)
             days_df_list.append(power_df)
 
@@ -49,10 +52,6 @@ def parse_raw_measurements(file_df: pd.DataFrame) -> pd.DataFrame:
     file_df.index.name = "timestamp"
     file_df = file_df.reset_index().drop_duplicates()
 
-    # expect each dataset is a complete day of 60*24 minutes so 1660 rows
-    row_count = len(file_df)
-    print(f"{file_df} has {row_count} rows.")
-
     # melt wide data of many columns -> narrow data of many rows
     melt_df = file_df.melt(
         id_vars=["timestamp"], var_name="raw_name", value_name="value"
@@ -66,21 +65,25 @@ def parse_raw_measurements(file_df: pd.DataFrame) -> pd.DataFrame:
     # filter to just the desired metrics, voltage of the DC bess and current at corresponding dc bus
     voltage_df = melt_df[
         melt_df["raw_name"].str.contains("DC voltage of the BESS", regex=False)
-    ]
+    ].copy()
     current_df = melt_df[
         melt_df["raw_name"].str.contains("DC Current bus", regex=False)
-    ]
+    ].copy()
 
-    voltage_df["Voltage (Vdc)"] = voltage_df["value"]
-    current_df["Current (A)"] = current_df["value"]
+    voltage_df.loc[:, "Voltage (Vdc)"] = voltage_df["value"]
+    current_df.loc[:, "Current (A)"] = current_df["value"]
 
     # BESS ID number i.e. 1 to 3
-    voltage_df["BESS ID"] = voltage_df["Measurement Name"].str.extract(r"(\d+)")
-    current_df["BESS ID"] = current_df["Measurement Name"].str.extract(r"(\d+)")
+    voltage_df.loc[:, "BESS ID"] = voltage_df["Measurement Name"].str.extract(r"(\d+)")
+    current_df.loc[:, "BESS ID"] = current_df["Measurement Name"].str.extract(r"(\d+)")
 
     # Inverter ID number is a string within previously bracketed contents, containing "PCS"
-    voltage_df["Inverter ID"] = voltage_df["Object ID"].str.extract(r"(\S*PCS\S*)$")
-    current_df["Inverter ID"] = current_df["Object ID"].str.extract(r"(\S*PCS\S*)$")
+    voltage_df.loc[:, "Inverter ID"] = voltage_df["Object ID"].str.extract(
+        r"(\S*PCS\S*)$"
+    )
+    current_df.loc[:, "Inverter ID"] = current_df["Object ID"].str.extract(
+        r"(\S*PCS\S*)$"
+    )
 
     # keep relevant columns
     voltage_df = voltage_df[["timestamp", "Inverter ID", "BESS ID", "Voltage (Vdc)"]]
