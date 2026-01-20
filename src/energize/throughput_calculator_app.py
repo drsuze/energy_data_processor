@@ -1,12 +1,12 @@
 import gradio as gr
 import pandas as pd
 
-from processors.power_to_energy_processor import (
+from energize.processors.power_to_energy_processor import (
     calc_per_bess_power_data,
     power_to_daily_energy,
     get_worst_n,
 )
-from visualizers.daily_energy_report import heatmap_daily_energy
+from energize.visualizers.daily_energy_report import heatmap_daily_energy
 
 
 def process(zip_folder):
@@ -19,11 +19,14 @@ def process(zip_folder):
     lowest_df = get_worst_n(energy_df=energy_df)
     return figp, fign, lowest_df, energy_df
 
-def main()
+
+def main():
     with gr.Blocks() as demo:
         with gr.Row():
             file_input = gr.File(
-                label="Upload zip folder of parquets", file_types=[".zip"], type="filepath"
+                label="Upload zip folder of parquets",
+                file_types=[".zip"],
+                type="filepath",
             )
 
         with gr.Row():
@@ -38,7 +41,9 @@ def main()
         with gr.Row():
             df2 = gr.Dataframe(label="BESS Throughput - All")
 
-        file_input.change(fn=process, inputs=file_input, outputs=[plot1, plot2, df1, df2])
+        file_input.change(
+            fn=process, inputs=file_input, outputs=[plot1, plot2, df1, df2]
+        )
 
     demo.launch()
 
