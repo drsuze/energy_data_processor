@@ -1,20 +1,23 @@
 # initial logic to convert time series data to daily energy stats
 
 
+import zipfile
 import pandas as pd
+import tempfile
+import os
 from pathlib import Path
 
 
 # LOGIC TO PARSE DATA
 
 # melt, filter, and calculate only the BESS-level dc power from voltage x current
-def calc_per_bess_power_data(parquet_files: list[Path]) -> pd.DataFrame:
+def calc_per_bess_power_data(zip_file) -> pd.DataFrame:
     """
     This function calculates the time series power data per BESS container.
 
     Input:
     
-        parquet_files: list of parquet file Paths containing raw time series data in wide format.
+        zip_file: zipped folder with parquet files containing raw time series data in wide format.
        
     Output: 
             
@@ -22,53 +25,68 @@ def calc_per_bess_power_data(parquet_files: list[Path]) -> pd.DataFrame:
     """
     days_df_list = []
 
-    for file in parquet_files:
-
-        file_df = pd.read_parquet(file)
-        file_df.index.name = 'timestamp'
-        file_df = file_df.reset_index().drop_duplicates()
-
-        # expect each dataset is a complete day of 60*24 minutes so 1660 rows
-        row_count = len(file_df)
-        print(f'{file} has {row_count} rows.')
+    # Temporary folder to extract ZIP
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with zipfile.ZipFile(zip_file.name, 'r') as z:
+            z.extractall(tmpdir)
         
-        # melt wide data of many columns -> narrow data of many rows
-        melt_df = file_df.melt(id_vars=['timestamp'], var_name="raw_name", value_name="value")
-        
-        # extract the contents within the brackets
-        melt_df[["Measurement Name", "Object ID"]] = melt_df["raw_name"].str.extract(
-            r"^(.*?)\s*\[(.*?)\]\s*$"
-        )
-
-        # filter to just the desired metrics, voltage of the DC bess and current at corresponding dc bus
-        voltage_df = melt_df[melt_df['raw_name'].str.contains("DC voltage of the BESS", regex=False)]
-        current_df = melt_df[melt_df['raw_name'].str.contains("DC Current bus", regex=False)]
-
-        voltage_df["Voltage (Vdc)"] = voltage_df['value']
-        current_df["Current (A)"] = current_df['value']
-        
-        # BESS ID number i.e. 1 to 3
-        voltage_df["BESS ID"] = voltage_df["Measurement Name"].str.extract(r"(\d+)")
-        current_df["BESS ID"] = current_df["Measurement Name"].str.extract(r"(\d+)")
-
-        # Inverter ID number is a string within previously bracketed contents, containing "PCS"
-        voltage_df["Inverter ID"] = voltage_df["Object ID"].str.extract(r"(\S*PCS\S*)$")
-        current_df["Inverter ID"] = current_df["Object ID"].str.extract(r"(\S*PCS\S*)$")
-
-        # keep relevant columns
-        voltage_df = voltage_df[['timestamp', 'Inverter ID', 'BESS ID', "Voltage (Vdc)"]]
-        current_df = current_df[['timestamp', 'Inverter ID', 'BESS ID', "Current (A)"]]
-
-        # combine voltage and current data
-        power_df = pd.merge(voltage_df, current_df, on=['timestamp', 'Inverter ID', 'BESS ID'])
-        
-        # multiple voltage and current to get power in W, divide by 1000 for kW
-        power_df['power (kW)'] = power_df['Voltage (Vdc)'] * power_df['Current (A)'] / 1000
-
-        days_df_list.append(power_df)
+        # Loop through all parquet files
+        for filename in os.listdir(tmpdir):
+            full_path = os.path.join(tmpdir, filename)
+            file_df = pd.read_parquet(full_path)
+            power_df = parse_raw_measurements(file_df)
+            days_df_list.append(power_df)
 
     full_df = pd.concat(days_df_list)
     return full_df
+
+
+def parse_raw_measurements(file_df: pd.DataFrame) -> pd.DataFrame:
+    """ 
+    Process original dataframe to get BESS container dc power in kW, one row per BESS per timestamp.
+    """
+
+    file_df.index.name = 'timestamp'
+    file_df = file_df.reset_index().drop_duplicates()
+
+    # expect each dataset is a complete day of 60*24 minutes so 1660 rows
+    row_count = len(file_df)
+    print(f'{file_df} has {row_count} rows.')
+    
+    # melt wide data of many columns -> narrow data of many rows
+    melt_df = file_df.melt(id_vars=['timestamp'], var_name="raw_name", value_name="value")
+    
+    # extract the contents within the brackets
+    melt_df[["Measurement Name", "Object ID"]] = melt_df["raw_name"].str.extract(
+        r"^(.*?)\s*\[(.*?)\]\s*$"
+    )
+
+    # filter to just the desired metrics, voltage of the DC bess and current at corresponding dc bus
+    voltage_df = melt_df[melt_df['raw_name'].str.contains("DC voltage of the BESS", regex=False)]
+    current_df = melt_df[melt_df['raw_name'].str.contains("DC Current bus", regex=False)]
+
+    voltage_df["Voltage (Vdc)"] = voltage_df['value']
+    current_df["Current (A)"] = current_df['value']
+    
+    # BESS ID number i.e. 1 to 3
+    voltage_df["BESS ID"] = voltage_df["Measurement Name"].str.extract(r"(\d+)")
+    current_df["BESS ID"] = current_df["Measurement Name"].str.extract(r"(\d+)")
+
+    # Inverter ID number is a string within previously bracketed contents, containing "PCS"
+    voltage_df["Inverter ID"] = voltage_df["Object ID"].str.extract(r"(\S*PCS\S*)$")
+    current_df["Inverter ID"] = current_df["Object ID"].str.extract(r"(\S*PCS\S*)$")
+
+    # keep relevant columns
+    voltage_df = voltage_df[['timestamp', 'Inverter ID', 'BESS ID', "Voltage (Vdc)"]]
+    current_df = current_df[['timestamp', 'Inverter ID', 'BESS ID', "Current (A)"]]
+
+    # combine voltage and current data
+    power_df = pd.merge(voltage_df, current_df, on=['timestamp', 'Inverter ID', 'BESS ID'])
+    
+    # multiple voltage and current to get power in W, divide by 1000 for kW
+    power_df['power (kW)'] = power_df['Voltage (Vdc)'] * power_df['Current (A)'] / 1000
+    
+    return power_df
 
 
 def power_to_daily_energy(power_df: pd.DataFrame, 
@@ -113,3 +131,12 @@ def power_to_daily_energy(power_df: pd.DataFrame,
     
     return energy_df
 
+
+def get_worst_n(energy_df: pd.DataFrame, n=5) -> pd.DataFrame:
+    """Based on total discharged throughput, return n lowest BESS containers."""
+
+    total_df = energy_df.groupby(by=['Inverter ID', 'BESS ID']
+                                  )['Positive Energy (kWh)'].sum().reset_index()
+    
+    lowest_df = total_df.sort_values('Positive Energy (kWh)').head(n)
+    return lowest_df
