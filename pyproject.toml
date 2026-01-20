@@ -1,6 +1,6 @@
 [project]
 name = "energize"
-version = "0.1.11"
+version = "0.1.12"
 description = "This package supports processing of raw BESS time series data into energy statistics and visualizations"
 authors = [
     {name = "Susannah Crowell",email = "susannahcrowell@gmail.com"}
