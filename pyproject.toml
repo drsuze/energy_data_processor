@@ -1,6 +1,6 @@
 [project]
 name = "energize"
-version = "0.1.7"
+version = "0.1.9"
 description = "This package supports processing of raw BESS time series data into energy statistics and visualizations"
 authors = [
     {name = "Susannah Crowell",email = "susannahcrowell@gmail.com"}
@@ -23,3 +23,6 @@ dependencies = [
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[project.urls]
+Repository = "https://github.com/drsuze/energy_data_processor"
