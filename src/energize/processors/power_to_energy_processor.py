@@ -1,13 +1,18 @@
 # initial logic to convert time series data to daily energy stats
 
 
+import logging
 import zipfile
 import pandas as pd
 import tempfile
 import os
 from pathlib import Path
 
-# LOGIC TO PARSE DATA
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 # melt, filter, and calculate only the BESS-level dc power from voltage x current
@@ -23,7 +28,8 @@ def calc_per_bess_power_data(zip_file) -> pd.DataFrame:
 
         Pandas DataFrame with BESS container dc power in kW, one row per BESS per timestamp.
     """
-    days_df_list = []
+    bess_power_df_list = []
+    raw_time_df_list = []
 
     # Temporary folder to extract ZIP
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -34,23 +40,93 @@ def calc_per_bess_power_data(zip_file) -> pd.DataFrame:
         for filename in os.listdir(tmpdir):
             full_path = os.path.join(tmpdir, filename)
             file_df = pd.read_parquet(full_path)
+            logging.info(f"Read parquet file named {filename} into a dataframe.")
+
             file_df = file_df.drop(
                 columns=[c for c in file_df.columns if c.startswith("Unnamed")]
             )
-            power_df = parse_raw_measurements(file_df)
-            days_df_list.append(power_df)
+            file_df.index.name = "timestamp"
+            file_df = file_df.reset_index().drop_duplicates()
+            raw_time_df_list.append(file_df)
 
-    full_df = pd.concat(days_df_list)
-    return full_df
+            power_df = parse_raw_measurements(file_df)
+            bess_power_df_list.append(power_df)
+
+    full_bess_power_df = pd.concat(bess_power_df_list)
+    full_time_df = pd.concat(raw_time_df_list)
+
+    logging.info(f"Calculating data coverage...")
+    gap_ranges_df = measure_data_coverage(full_time_df)
+
+    return full_bess_power_df, gap_ranges_df
+
+
+def measure_data_coverage(file_df: pd.DataFrame):
+    """This functions calculates the time coverage percent of input data and reports gaps."""
+    file_df.loc[:, "timestamp"] = pd.to_datetime(file_df["timestamp"])
+    file_df = file_df.sort_values("timestamp")
+
+    # first timestamp expected to start at 1 minute after midnight
+    earliest_date = file_df["timestamp"].min().date()
+
+    # last timestamp expected to end at midnight which looks like the next day
+    # so subtract 1 minute before assuming latest date
+    latest_date = (file_df["timestamp"].max() - pd.Timedelta(minutes=1)).date()
+
+    day_count = (latest_date - earliest_date).days + 1
+    logging.info(f"File includes data from a {day_count}-day date range")
+
+    # create a dataframe whose index covers all minutes in the comparable data range
+    start_ts = pd.Timestamp(earliest_date) + pd.Timedelta(minutes=1)
+    end_ts = pd.Timestamp(latest_date) + pd.Timedelta(days=1) - pd.Timedelta(minutes=1)
+
+    full_index = pd.date_range(start=start_ts, end=end_ts, freq="1min")
+    coverage_df = pd.DataFrame(index=full_index).reset_index()
+    coverage_df = coverage_df.rename(columns={"index": "timestamp"})
+
+    # make sure the data is normalized to the minute, just in case
+    file_df["timestamp"] = pd.to_datetime(file_df["timestamp"]).dt.floor("min")
+
+    # merge for comparison
+    merged = coverage_df.merge(
+        file_df[["timestamp"]], on="timestamp", how="left", indicator=True
+    )
+
+    missing_minutes = merged.loc[merged["_merge"] == "left_only", "timestamp"]
+    present_minutes = merged.loc[merged["_merge"] == "both", "timestamp"]
+    coverage_pct = len(present_minutes) / len(full_index) * 100
+
+    logging.info(
+        "Time coverage: %.2f%% (%d / %d minutes present)",
+        coverage_pct,
+        len(present_minutes),
+        len(full_index),
+    )
+
+    gaps = missing_minutes.diff().ne(pd.Timedelta(minutes=1)).cumsum()
+
+    gap_ranges = missing_minutes.groupby(gaps).agg(
+        gap_start="min", gap_end="max", gap_length_minutes="count"
+    )
+    gap_ranges["gap_length_days"] = gap_ranges["gap_length_minutes"] / (60 * 24)
+
+    if gap_ranges.empty:
+        logging.info("No gaps detected in time coverage.")
+    else:
+        logging.info(
+            "Detected %d gap ranges:\n%s",
+            len(gap_ranges),
+            gap_ranges.to_string(index=False),
+        )
+
+    gap_ranges_df = gap_ranges.reset_index()
+    return gap_ranges_df
 
 
 def parse_raw_measurements(file_df: pd.DataFrame) -> pd.DataFrame:
     """
     Process original dataframe to get BESS container dc power in kW, one row per BESS per timestamp.
     """
-
-    file_df.index.name = "timestamp"
-    file_df = file_df.reset_index().drop_duplicates()
 
     # melt wide data of many columns -> narrow data of many rows
     melt_df = file_df.melt(
@@ -137,10 +213,10 @@ def power_to_daily_energy(
     # separate charging/discharging via positive/negative power values (reflecting current direction)
     power_df["positive_kw"] = power_df[power_kw_col].clip(lower=0)
     power_df["negative_kw"] = power_df[power_kw_col].clip(upper=0)
-    power_df["Negative Energy (kWh)"] = (
+    power_df["Charged Energy (kWh)"] = (
         power_df["negative_kw"] * power_df["time_delta_seconds"] / 3600
     )
-    power_df["Positive Energy (kWh)"] = (
+    power_df["Discharged Energy (kWh)"] = (
         power_df["positive_kw"] * power_df["time_delta_seconds"] / 3600
     )
 
@@ -149,7 +225,7 @@ def power_to_daily_energy(
     groupby_cols = ["date"] + id_cols
     energy_df = (
         power_df.groupby(by=groupby_cols)[
-            ["Positive Energy (kWh)", "Negative Energy (kWh)"]
+            ["Discharged Energy (kWh)", "Charged Energy (kWh)"]
         ]
         .sum()
         .reset_index()
@@ -162,10 +238,10 @@ def get_worst_n(energy_df: pd.DataFrame, n=5) -> pd.DataFrame:
     """Based on total discharged throughput, return n lowest BESS containers."""
 
     total_df = (
-        energy_df.groupby(by=["Inverter ID", "BESS ID"])["Positive Energy (kWh)"]
+        energy_df.groupby(by=["Inverter ID", "BESS ID"])["Discharged Energy (kWh)"]
         .sum()
         .reset_index()
     )
 
-    lowest_df = total_df.sort_values("Positive Energy (kWh)").head(n)
+    lowest_df = total_df.sort_values("Discharged Energy (kWh)").head(n)
     return lowest_df
