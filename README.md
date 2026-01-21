@@ -10,6 +10,7 @@ source energize_venv/bin/activate  # macOS
 # OR
 energize_venv\Scripts\Activate.ps1 # Windows
 ```
+If you have trouble getting through these first two steps, consult the detailed setups instructions here: https://github.com/drsuze/energy_data_processor/blob/main/docs/setup.md
 
 3. Install the latest available 'energizer' package with the following command:
 ```bash
