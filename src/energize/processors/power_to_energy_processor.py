@@ -49,14 +49,12 @@ def calc_per_bess_power_data(zip_file) -> pd.DataFrame:
             file_df = file_df.reset_index().drop_duplicates()
             raw_time_df_list.append(file_df)
 
-            power_df = parse_raw_measurements(file_df)
-            bess_power_df_list.append(power_df)
-
-    full_bess_power_df = pd.concat(bess_power_df_list)
     full_time_df = pd.concat(raw_time_df_list)
 
     logging.info(f"Calculating data coverage...")
     gap_ranges_df = measure_data_coverage(full_time_df)
+
+    full_bess_power_df = parse_raw_measurements(full_time_df)
 
     return full_bess_power_df, gap_ranges_df
 
@@ -214,7 +212,7 @@ def power_to_daily_energy(
     power_df["positive_kw"] = power_df[power_kw_col].clip(lower=0)
     power_df["negative_kw"] = power_df[power_kw_col].clip(upper=0)
     power_df["Charged Energy (kWh)"] = (
-        power_df["negative_kw"] * power_df["time_delta_seconds"] / 3600
+        -1 * power_df["negative_kw"] * power_df["time_delta_seconds"] / 3600
     )
     power_df["Discharged Energy (kWh)"] = (
         power_df["positive_kw"] * power_df["time_delta_seconds"] / 3600
