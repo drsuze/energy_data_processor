@@ -29,9 +29,9 @@ python -m energize.throughput_calculator_app
 ### Using the App
 1. The resulting terminal output should tell you that the app is running somewhere like http://127.0.0.1:7860; open that URL in your browser
 
-2. The app indicates you where you upload your zip-file, which contains the 1 or more parquet files** that you would like to process. Once uploaded, click the Submit button.
+2. The app indicates you where you upload your zip-file, which contains the 1 or more parquet files** that you would like to process. Once uploaded, the processing will start automatically.
 
-3. With the sample dataset this was originally built from, the processing may take 40-60 seconds. Once complete, you should see two heatmaps and two tables displaying energy data.
+3. With the sample dataset this was originally built from, the processing may take around 1 minute. Once complete, you should see two heatmaps and two tables displaying energy data.
 
 **   Note: 
 The particular formatting required of the input parquet files is bespoke to certain power system outputs, and is not described here for confidentiality reasons. You can email the author with questions.
