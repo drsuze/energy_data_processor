@@ -9,8 +9,8 @@ This repository includes the package named 'energizer' which generates daily ene
 python3.12 -m venv energize_venv
 source energize_venv/bin/activate  
 # OR for Windows + conda users
-conda create -n energize python=3.12
-conda activate energize
+conda create -n energize_venv python=3.12
+conda activate energize_venv
 ```
 If you have trouble getting through these first two steps, consult the detailed setups instructions here: https://github.com/drsuze/energy_data_processor/blob/main/docs/setup.md
 
