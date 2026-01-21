@@ -15,11 +15,9 @@ conda activate energize_venv
 If you have trouble getting through these first two steps, consult the detailed setups instructions here: https://github.com/drsuze/energy_data_processor/blob/main/docs/setup.md
 
 3. Install the latest available 'energizer' package with the following command:
+
 ```bash
-pip install \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple \
-  energize
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple energize
 ```
 4. To launch the app, enter the following terminal command:
 ```bash
