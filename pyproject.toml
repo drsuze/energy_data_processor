@@ -1,0 +1,28 @@
+[project]
+name = "energize"
+version = "0.1.12"
+description = "This package supports processing of raw BESS time series data into energy statistics and visualizations"
+authors = [
+    {name = "Susannah Crowell",email = "susannahcrowell@gmail.com"}
+]
+readme = "README.md"
+packages = [
+    { include = "energize" }
+]
+requires-python = ">=3.12,<3.14"
+
+dependencies = [
+    "gradio>=4.0,<7.0",
+    "pandas>=2.2,<3.0",
+    "numpy>=1.26,<3.0",
+    "plotly>=5.18,<7.0",
+    "pyarrow>=23.0,<24.0",
+    "fastparquet>=2025.12,<2026.0"
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[project.urls]
+Repository = "https://github.com/drsuze/energy_data_processor"
