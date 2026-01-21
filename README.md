@@ -3,12 +3,14 @@ This repository includes the package named 'energizer' which generates daily ene
 
 ### How to install and use the latest version of the energizer package available in TestPyPi
 1. Make sure you have Python3.12 installed
-2. In your terminal, create a new environment using Python3.12
+2. In your terminal, create and activate a new environment using Python3.12
 ```bash
+# macOS
 python3.12 -m venv energize_venv
-source energize_venv/bin/activate  # macOS
-# OR
-energize_venv\Scripts\Activate.ps1 # Windows
+source energize_venv/bin/activate  
+# OR for Windows + conda users
+conda create -n energize python=3.12
+conda activate energize
 ```
 If you have trouble getting through these first two steps, consult the detailed setups instructions here: https://github.com/drsuze/energy_data_processor/blob/main/docs/setup.md
 
